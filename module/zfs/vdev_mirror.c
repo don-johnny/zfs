@@ -296,10 +296,11 @@ vdev_mirror_io_start(zio_t *zio)
 		c = vdev_mirror_child_select(zio);
 		children = (c >= 0);
 	} else {
-		ASSERT(zio->io_type == ZIO_TYPE_WRITE);
+    ASSERT(zio->io_type == ZIO_TYPE_WRITE ||
+        zio->io_type == ZIO_TYPE_FREE);
 
 		/*
-		 * Writes go to all children.
+		 * Writes and frees go to all children.
 		 */
 		c = 0;
 		children = mm->mm_children;
@@ -380,6 +381,8 @@ vdev_mirror_io_done(zio_t *zio)
 				zio->io_error = vdev_mirror_worst_error(mm);
 		}
 		return;
+  } else if (zio->io_type == ZIO_TYPE_FREE) {
+    return;
 	}
 
 	ASSERT(zio->io_type == ZIO_TYPE_READ);

@@ -187,7 +187,7 @@ struct dk_geom {
  * returns.  The caller's locking strategy should be prepared for this case.
  */
 #define	DKIOCFLUSHWRITECACHE	(DKIOC|34)	/* flush cache to phys medium */
-
+#define DKIOCTRIM    (DKIOC|35)  /* TRIM a block */
 struct dk_callback {
 	void (*dkc_callback)(void *dkc_cookie, int error);
 	void *dkc_cookie;

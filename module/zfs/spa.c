@@ -63,6 +63,7 @@
 #include <sys/spa_boot.h>
 #include <sys/zfs_ioctl.h>
 #include <sys/dsl_scan.h>
+#include <sys/trim_map.h>
 #include <sys/zfeature.h>
 
 #ifdef	_KERNEL
@@ -1081,7 +1082,10 @@ spa_activate(spa_t *spa, int mode)
 	if (spa->spa_proc == &p0) {
 		spa_create_zio_taskqs(spa);
 	}
-
+  /*
+   * Start TRIM thread.
+   */
+  trim_thread_create(spa);
 	list_create(&spa->spa_config_dirty_list, sizeof (vdev_t),
 	    offsetof(vdev_t, vdev_config_dirty_node));
 	list_create(&spa->spa_state_dirty_list, sizeof (vdev_t),
@@ -1111,7 +1115,11 @@ spa_deactivate(spa_t *spa)
 	ASSERT(spa->spa_root_vdev == NULL);
 	ASSERT(spa->spa_async_zio_root == NULL);
 	ASSERT(spa->spa_state != POOL_STATE_UNINITIALIZED);
-
+  /*
+   * Stop TRIM thread in case spa_unload() wasn't called before
+   * spa_deactivate().
+   */
+  trim_thread_destroy(spa);
 	txg_list_destroy(&spa->spa_vdev_txg_list);
 
 	list_destroy(&spa->spa_config_dirty_list);
@@ -1227,6 +1235,11 @@ spa_unload(spa_t *spa)
 	ASSERT(MUTEX_HELD(&spa_namespace_lock));
 
 	/*
+   * Stop TRIM thread.
+   */
+  trim_thread_destroy(spa);
+
+  /*
 	 * Stop async tasks.
 	 */
 	spa_async_suspend(spa);
@@ -1522,7 +1535,7 @@ spa_load_l2cache(spa_t *spa)
 
 			if (spa_l2cache_exists(vd->vdev_guid, &pool) &&
 			    pool != 0ULL && l2arc_vdev_present(vd))
-				l2arc_remove_vdev(vd);
+				l2arc_remove_vdev(vd, 1);
 			vdev_clear_stats(vd);
 			vdev_free(vd);
 		}
@@ -3381,7 +3394,8 @@ spa_l2cache_drop(spa_t *spa)
 
 		if (spa_l2cache_exists(vd->vdev_guid, &pool) &&
 		    pool != 0ULL && l2arc_vdev_present(vd))
-			l2arc_remove_vdev(vd);
+      l2arc_remove_vdev(vd, spa->spa_state ==
+          POOL_STATE_DESTROYED);
 	}
 }
 
@@ -5751,7 +5765,7 @@ spa_free_sync_cb(void *arg, const blkptr_t *bp, dmu_tx_t *tx)
 	zio_t *zio = arg;
 
 	zio_nowait(zio_free_sync(zio, zio->io_spa, dmu_tx_get_txg(tx), bp,
-	    zio->io_flags));
+	    BP_GET_PSIZE(bp), zio->io_flags));
 	return (0);
 }
 
