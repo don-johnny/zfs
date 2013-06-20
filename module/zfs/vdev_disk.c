@@ -598,7 +598,6 @@ retry:
 #endif
       nr_iovecs = bio_nr_pages(bio_ptr, bio_size);
     dr->dr_bio[i] = bio_alloc(GFP_NOIO, nr_iovecs);
-		                          bio_nr_pages(bio_ptr, bio_size));
 		if (dr->dr_bio[i] == NULL) {
 			vdev_disk_dio_free(dr);
 			return ENOMEM;
